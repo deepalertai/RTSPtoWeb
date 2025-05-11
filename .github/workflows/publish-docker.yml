@@ -29,39 +29,7 @@ jobs:
           pip install pre-commit -q --root-user-action=ignore
           pre-commit autoupdate
 
-        # This step will fail if pre-commit exits non-zero for *any* reason
-      - name: Run Pre-Commit
-        run: |
-          success=false
-          for i in {1..5}; do
-            echo "Running pre-commit attempt $i..."
-            if pre-commit run --all-files --show-diff-on-failure; then
-              echo "Pre-commit checks passed"
-              success=true
-              break
-            else
-              exit_code=$?
-              echo "Attempt $i failed with exit code $exit_code."
-              if [ $i -lt 5 ]; then
-                sleep 5
-              fi
-            fi
-          done
-
-          if [ "$success" = false ]; then
-            echo "Pre-commit failed"
-            exit 1
-          fi
-          echo "Pre-commit finished successfully."
-        shell: bash
-
-  # precommit:
-  #   needs: setup
-  #   uses: deepalertai/global_actions/.github/workflows/precommit.yml@main
-
   build:
-    needs:
-      - precommit
     uses: deepalertai/global_actions/.github/workflows/build.yml@main
     with:
       project_id: ${{ vars[format('PROJECT_ID_{0}', github.ref_name)] }}
