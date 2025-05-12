@@ -19,6 +19,5 @@ jobs:
     uses: deepalertai/global_actions/.github/workflows/build.yml@main
     with:
       project_id: ${{ vars[format('PROJECT_ID_{0}', github.ref_name)] }}
-      name: rstptoweb
     secrets:
       gcp_provider: ${{ secrets[format('GCP_ID_PROVIDER_{0}', github.ref_name)] }}
