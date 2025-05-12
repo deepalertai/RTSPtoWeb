@@ -12,23 +12,10 @@ on:
 
 jobs:
   precommit:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
-      - name: Install
-        shell: bash
-        run: |
-          pip install pre-commit -q --root-user-action=ignore
-          pre-commit autoupdate
+    uses: deepalertai/global_actions/.github/workflows/precommit.yml@main
 
   build:
+    needs: precommit
     uses: deepalertai/global_actions/.github/workflows/build.yml@main
     with:
       project_id: ${{ vars[format('PROJECT_ID_{0}', github.ref_name)] }}
