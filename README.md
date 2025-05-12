@@ -40,7 +40,7 @@ without the use of FFmpeg or GStreamer!
 
 1. Run docker container
     ```bash
-    $ docker run --name rtsp-to-web --network host ghcr.io/deepch/rtsptoweb:latest 
+    $ docker run --name rtsp-to-web --network host ghcr.io/deepch/rtsptoweb:latest
     ```
 1. Open Browser
     ```bash
@@ -53,7 +53,7 @@ You may override the <a href="#example-configjson">configuration</a> `/PATH_TO_C
 $ docker run --name rtsp-to-web \
     -v /PATH_TO_CONFIG/config.json:/config/config.json \
     --network host \
-    ghcr.io/deepch/rtsptoweb:latest 
+    ghcr.io/deepch/rtsptoweb:latest
 ```
 
 ## Configuration
@@ -255,4 +255,3 @@ Examples of working with video on golang
 - [RTSPtoHLSLL](https://github.com/deepch/RTSPtoHLSLL)
 
 [![paypal.me/AndreySemochkin](https://ionicabizau.github.io/badges/paypal.svg)](https://www.paypal.me/AndreySemochkin) - You can make one-time donations via PayPal. I'll probably buy a ~~coffee~~ tea. :tea:
-
