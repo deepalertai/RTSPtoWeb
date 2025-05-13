@@ -3,9 +3,9 @@ name: CI/CD
 on:
   push:
     branches:
-      - main
-      - dev
-      - preprod
+    - main
+    - dev
+    - preprod
   workflow_dispatch:
   repository_dispatch:
     types: [restart-trigger]
