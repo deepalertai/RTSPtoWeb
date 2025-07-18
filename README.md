@@ -6,6 +6,7 @@ without the use of FFmpeg or GStreamer!
 
 ## Table of Contents
 
+- [Release Workflow](#release-workflow)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Command-line](#command-line)
@@ -14,6 +15,32 @@ without the use of FFmpeg or GStreamer!
 - [Performance](#performance)
 - [Authors](#authors)
 - [License](#license)
+
+## Release Workflow
+
+The project uses a three-stage release workflow managed with GitHub Actions.
+
+### Workflow Overview
+
+| Stage     | Trigger                                | Action                                                                 |
+|-----------|----------------------------------------|------------------------------------------------------------------------|
+| Dev       | Push to `dev` branch                   | Builds Docker image, restarts **staging** deployments       |
+| Preprod   | Push to `release-*` branches           | Builds Docker image, restarts **preprod** deployments       |
+| Prod      | Push of `v*.*.*` tags                  | Builds Docker image only, tags it with the release version             |
+
+### Makefile Targets
+For convenience and consistency the following commands are available:
+
+- `make preprod-release`  
+  - Preprod cutoff from `dev`  
+  - Generate version from the previous release tag, or takes user input (e.g. `1.0.0`)  
+  - Creates and pushes the `release-<version>` branch  
+  - Triggers the `preprod.yml` workflow
+
+- `make prod-release`  
+  - Generate the version tag from the branch name (e.g. `release-1.0.1` → `v1.0.1`)  
+  - Creates and pushes the tag on confirmation
+  - Triggers the `prod.yml` workflow
 
 ## Installation
 
