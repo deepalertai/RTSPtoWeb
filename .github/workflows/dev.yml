@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    uses: deepalertai/global_actions/.github/workflows/build.yml@dev
+    uses: deepalertai/global_actions/.github/workflows/build.yml@main
     with:
       project_id: ${{ vars.PROJECT_ID_DEV }}
       tag: dev
