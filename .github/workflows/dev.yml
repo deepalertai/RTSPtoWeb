@@ -1,0 +1,19 @@
+name: Deploy dev
+
+on:
+  push:
+    branches:
+    - dev
+  workflow_dispatch:
+  repository_dispatch:
+    types: [restart-trigger]
+
+jobs:
+  build:
+    uses: deepalertai/global_actions/.github/workflows/build.yml@main
+    with:
+      project_id: ${{ vars.PROJECT_ID_DEV }}
+      tag: dev
+      registry_environment: dev
+    secrets:
+      gcp_provider: ${{ secrets.GCP_ID_PROVIDER_DEV }}

@@ -1,0 +1,16 @@
+name: Deploy preprod
+
+on:
+  push:
+    branches:
+    - "release-[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  build:
+    uses: deepalertai/global_actions/.github/workflows/build.yml@main
+    with:
+      project_id: ${{ vars.PROJECT_ID_PREPROD }}
+      tag: preprod
+      registry_environment: preprod
+    secrets:
+      gcp_provider: ${{ secrets.GCP_ID_PROVIDER_PREPROD }}
