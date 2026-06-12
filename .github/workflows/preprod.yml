@@ -12,5 +12,7 @@ jobs:
       project_id: ${{ vars.PROJECT_ID_PREPROD }}
       tag: preprod
       registry_environment: preprod
+      multiarch: true
+      runs_on_arm: 'ubuntu-latest-arm'
     secrets:
       gcp_provider: ${{ secrets.GCP_ID_PROVIDER_PREPROD }}

@@ -13,5 +13,7 @@ jobs:
       project_id: ${{ vars.PROJECT_ID_MAIN }}
       tag: ${{ github.ref_name }}
       registry_environment: main
+      multiarch: true
+      runs_on_arm: 'ubuntu-latest-arm'
     secrets:
       gcp_provider: ${{ secrets.GCP_ID_PROVIDER_MAIN }}
