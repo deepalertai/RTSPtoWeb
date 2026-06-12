@@ -5,8 +5,6 @@ on:
     branches:
     - dev
   workflow_dispatch:
-  repository_dispatch:
-    types: [restart-trigger]
 
 jobs:
   build:
@@ -15,5 +13,7 @@ jobs:
       project_id: ${{ vars.PROJECT_ID_DEV }}
       tag: dev
       registry_environment: dev
+      multiarch: true
+      runs_on_arm: 'ubuntu-latest-arm'
     secrets:
       gcp_provider: ${{ secrets.GCP_ID_PROVIDER_DEV }}
