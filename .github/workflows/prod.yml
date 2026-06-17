@@ -14,6 +14,6 @@ jobs:
       tag: ${{ github.ref_name }}
       registry_environment: main
       multiarch: true
-      runs_on_arm: 'ubuntu-latest-arm'
+      runs_on_arm: 'ubuntu-24.04-arm'
     secrets:
       gcp_provider: ${{ secrets.GCP_ID_PROVIDER_MAIN }}
