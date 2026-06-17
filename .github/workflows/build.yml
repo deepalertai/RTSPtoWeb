@@ -1,0 +1,268 @@
+on:
+  workflow_call:
+    inputs:
+      project_id:
+        required: true
+        type: string
+      tag:
+        description: 'Image tag. Defaults to registry_environment when unset.'
+        required: false
+        type: string
+      registry_environment:
+        required: true
+        type: string
+      dockerfile:
+        required: false
+        type: string
+        default: '.infra/Dockerfile'
+      name:
+        required: false
+        type: string
+      environment:
+        description: 'GitHub Environment'
+        type: string
+        default: 'dev'
+      runs_on:
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      multiarch:
+        description: 'Produce a linux/amd64+linux/arm64 manifest list. amd64 builds on runs_on, arm64 builds on runs_on_arm.'
+        required: false
+        type: boolean
+        default: false
+      runs_on_arm:
+        description: 'Runner label for the arm64 leg. Only used when multiarch=true.'
+        required: false
+        type: string
+        default: 'ubuntu-arm'
+    secrets:
+      gcp_provider:
+        required: true
+      args:
+        required: false
+
+jobs:
+  # --- Single-arch path (default) -------------------------------------------
+  # Runs only when multiarch=false. Identical to the previous behaviour.
+  build:
+    if: ${{ !inputs.multiarch }}
+    runs-on: ${{ inputs.runs_on }}
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      # checkout with lfs
+      - uses: actions/checkout@v5
+      - name: Pull LFS files
+        run: |
+          git lfs install
+          git lfs pull
+
+      # sanitise repo name for docker image, or use provided input name
+      - name: Set env
+        run: |
+          IMAGE_NAME=""
+          INPUT_NAME="${{ inputs.name }}"
+
+          if [ -n "$INPUT_NAME" ]; then
+            IMAGE_NAME="$INPUT_NAME"
+          else
+            RAW_NAME="${{ github.event.repository.name }}"
+            SANITIZED_NAME=$(echo "${RAW_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
+            IMAGE_NAME="$SANITIZED_NAME"
+          fi
+          echo "NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+          echo "REGISTRY=${{ vars.REGION }}-docker.pkg.dev/${{ inputs.project_id }}/${{ inputs.registry_environment }}" >> $GITHUB_ENV
+
+          TAG="${{ inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ inputs.registry_environment }}"
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+
+      - name: Authenticate GCP
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ secrets.gcp_provider }}'
+          project_id: '${{ inputs.project_id}}'
+
+      - name: Configure Docker Authentication
+        run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
+
+      - name: Build Docker Image
+        shell: bash
+        run: |
+          docker build --network=host --pull -t "${{ env.REGISTRY }}/${{ env.NAME }}:${{ github.sha }}" -f ${{ inputs.dockerfile }} --build-arg BRANCH="${{ env.TAG }}" --build-arg REGISTRY="${{ env.REGISTRY }}" ${{ secrets.args }} .
+          docker tag "${{ env.REGISTRY }}/${{ env.NAME }}:${{ github.sha }}" "${{ env.REGISTRY }}/${{ env.NAME }}:${{ env.TAG }}"
+
+      - name: Push Docker Image
+        shell: bash
+        run: |
+          docker push "${{ env.REGISTRY }}/${{ env.NAME }}:${{ github.sha }}"
+          docker push "${{ env.REGISTRY }}/${{ env.NAME }}:${{ env.TAG }}"
+          {
+            echo "## Image tag"
+            echo ""
+            echo '```'
+            echo "${{ env.TAG }}"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  # --- Multi-arch path (opt-in) ---------------------------------------------
+  # Native build per arch on a matching runner — no QEMU. Each leg pushes by
+  # digest only (no tags); the merge job stitches them into one manifest list
+  # tagged :sha and :<tag>. Canonical docker/build-push-action multi-platform
+  # pattern.
+  build-multiarch:
+    if: ${{ inputs.multiarch }}
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ${{ inputs.runs_on }}
+          - platform: linux/arm64
+            runner: ${{ inputs.runs_on_arm }}
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Prepare platform pair
+        # docker/build-push-action emits a digest per matrix leg. Key the
+        # uploaded artifact on a fs-safe form of the platform (`linux-amd64`)
+        # so the merge step can pick them all up with one download.
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v5
+      - name: Pull LFS files
+        run: |
+          git lfs install
+          git lfs pull
+
+      - name: Set env
+        run: |
+          IMAGE_NAME=""
+          INPUT_NAME="${{ inputs.name }}"
+          if [ -n "$INPUT_NAME" ]; then
+            IMAGE_NAME="$INPUT_NAME"
+          else
+            RAW_NAME="${{ github.event.repository.name }}"
+            SANITIZED_NAME=$(echo "${RAW_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
+            IMAGE_NAME="$SANITIZED_NAME"
+          fi
+          echo "NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+          echo "REGISTRY=${{ vars.REGION }}-docker.pkg.dev/${{ inputs.project_id }}/${{ inputs.registry_environment }}" >> $GITHUB_ENV
+
+          TAG="${{ inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ inputs.registry_environment }}"
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+
+      - name: Authenticate GCP
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ secrets.gcp_provider }}'
+          project_id: '${{ inputs.project_id }}'
+
+      - name: Configure Docker Authentication
+        run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BRANCH=${{ env.TAG }}
+            REGISTRY=${{ env.REGISTRY }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.NAME }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        # Drop a single empty file named after the digest (sans algorithm
+        # prefix). The merge step joins all of these via a glob.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-multiarch:
+    if: ${{ inputs.multiarch }}
+    needs: [build-multiarch]
+    runs-on: ${{ inputs.runs_on }}
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set env
+        run: |
+          IMAGE_NAME=""
+          INPUT_NAME="${{ inputs.name }}"
+          if [ -n "$INPUT_NAME" ]; then
+            IMAGE_NAME="$INPUT_NAME"
+          else
+            RAW_NAME="${{ github.event.repository.name }}"
+            SANITIZED_NAME=$(echo "${RAW_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
+            IMAGE_NAME="$SANITIZED_NAME"
+          fi
+          echo "NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+          echo "REGISTRY=${{ vars.REGION }}-docker.pkg.dev/${{ inputs.project_id }}/${{ inputs.registry_environment }}" >> $GITHUB_ENV
+
+          TAG="${{ inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ inputs.registry_environment }}"
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+
+      - name: Authenticate GCP
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ secrets.gcp_provider }}'
+          project_id: '${{ inputs.project_id }}'
+
+      - name: Configure Docker Authentication
+        run: gcloud auth configure-docker ${{ vars.REGION }}-docker.pkg.dev
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "${{ env.REGISTRY }}/${{ env.NAME }}:${{ github.sha }}" \
+            -t "${{ env.REGISTRY }}/${{ env.NAME }}:${{ env.TAG }}" \
+            $(printf "${{ env.REGISTRY }}/${{ env.NAME }}@sha256:%s " *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.NAME }}:${{ env.TAG }}"
+          {
+            echo "## Image tag (multi-arch)"
+            echo ""
+            echo '```'
+            echo "${{ env.TAG }}"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
